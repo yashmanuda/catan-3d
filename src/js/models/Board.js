@@ -333,9 +333,12 @@ export class Board {
         return corner;
     }
 
-    highlightAvailableCorners(corners) {
-        // Remove any existing indicators
+    highlightAvailableCorners(highlightedCorners) {
+        // Clear previous highlights
         this.hideCorners();
+
+        // Get all corners from the board
+        const corners = Array.from(this.corners.values()).map(corner => corner.mesh);
 
         // Only highlight valid settlement locations
         corners.forEach(corner => {
@@ -387,6 +390,7 @@ export class Board {
                     glowMaterial,
                     coreMaterial
                 });
+                highlightedCorners.push(indicator);
             }
         });
     }
@@ -852,8 +856,9 @@ export class Board {
     }
 
     hideEdges() {
-        this.edgeIndicators.forEach(indicator => {
-            this.group.remove(indicator.group);
+        // Remove all edge indicators
+        this.edgeIndicators.forEach((data, edge) => {
+            this.group.remove(data.mesh);
         });
         this.edgeIndicators.clear();
     }
@@ -905,13 +910,8 @@ export class Board {
 
     highlightAvailableEdges(highlightedEdges) {
         // Clear previous highlights
-        highlightedEdges.forEach(edge => {
-            if (edge.parent) {
-                edge.parent.remove(edge);
-            }
-        });
-        highlightedEdges.length = 0;
-
+        this.hideEdges();
+        
         // Find and highlight available edges
         this.edges.forEach(edge => {
             if (!edge.hasRoad) {

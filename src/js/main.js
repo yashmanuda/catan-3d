@@ -101,7 +101,7 @@ const board = new Board();
 scene.add(board.group);
 
 // Sound effects
-const houseSound = new Audio('https://assets.mixkit.co/active_storage/sfx/2013/2013-preview.mp3');
+const houseSound = new Audio('/src/assets/hammer_sound.wav');
 houseSound.volume = 0.4;
 
 const roadSound = new Audio('https://assets.mixkit.co/active_storage/sfx/2013/2013-preview.mp3');
@@ -135,14 +135,9 @@ window.addEventListener('mousemove', (event) => {
 const menuBar = new MenuBar(
     () => {
         rotationControls.startRotation();
-        // Add mouseup/mouseleave listeners to stop rotation
-        const stopRotation = () => {
-            rotationControls.stopRotation();
-            window.removeEventListener('mouseup', stopRotation);
-            window.removeEventListener('mouseleave', stopRotation);
-        };
-        window.addEventListener('mouseup', stopRotation);
-        window.addEventListener('mouseleave', stopRotation);
+    },
+    () => {
+        rotationControls.stopRotation();
     },
     () => {
         isPlacingSettlement = true;

@@ -11,17 +11,17 @@ export class MenuBar {
         menuBar.style.backgroundColor = 'rgba(255, 255, 255, 0.8)';
         menuBar.style.borderRadius = '10px';
         menuBar.style.boxShadow = '0 2px 10px rgba(0, 0, 0, 0.1)';
-        
+
         // Rotate button
         const rotateButton = document.createElement('button');
         rotateButton.textContent = '🔄 Rotate';
         rotateButton.className = 'menu-button';
-        
+
         // Settlement button
         const settlementButton = document.createElement('button');
         settlementButton.textContent = '🏠 Place Settlement';
         settlementButton.className = 'menu-button';
-        
+
         // Road button
         const roadButton = document.createElement('button');
         roadButton.textContent = '🛣️ Place Road';
@@ -38,7 +38,8 @@ export class MenuBar {
             button.style.cursor = 'pointer';
             button.style.fontSize = '16px';
             button.style.transition = 'background-color 0.3s';
-            
+            button.style.userSelect = 'none'; // Prevent text selection during long press
+
             button.addEventListener('mouseenter', () => {
                 button.style.backgroundColor = '#45a049';
             });
@@ -58,7 +59,7 @@ export class MenuBar {
                 if (isRotating) {
                     onRotateStart();
                 }
-            }, 500);
+            }, 500); // 500ms long press
         });
         
         rotateButton.addEventListener('mouseup', () => {
@@ -73,6 +74,29 @@ export class MenuBar {
                 clearTimeout(rotateTimeout);
                 onRotateEnd();
             }
+        });
+
+        // Add touch support for mobile
+        rotateButton.addEventListener('touchstart', (e) => {
+            e.preventDefault(); // Prevent scrolling
+            isRotating = true;
+            rotateTimeout = setTimeout(() => {
+                if (isRotating) {
+                    onRotateStart();
+                }
+            }, 500);
+        });
+
+        rotateButton.addEventListener('touchend', () => {
+            isRotating = false;
+            clearTimeout(rotateTimeout);
+            onRotateEnd();
+        });
+
+        rotateButton.addEventListener('touchcancel', () => {
+            isRotating = false;
+            clearTimeout(rotateTimeout);
+            onRotateEnd();
         });
         
         settlementButton.addEventListener('click', onSettlementClick);

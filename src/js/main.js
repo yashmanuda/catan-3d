@@ -104,7 +104,7 @@ scene.add(board.group);
 const houseSound = new Audio('/src/assets/hammer_sound.wav');
 houseSound.volume = 0.4;
 
-const roadSound = new Audio('https://assets.mixkit.co/active_storage/sfx/2013/2013-preview.mp3');
+const roadSound = new Audio('/src/assets/hammer_sound.wav');
 roadSound.volume = 0.4;
 
 // Game state
@@ -173,21 +173,20 @@ window.addEventListener('click', () => {
             house.group.position.y += 2; // Start from above
             scene.add(house.group);
             
-            // Play brick dropping sound effect
+            // Play hammer sound effect
             houseSound.currentTime = 0;
             houseSound.play();
             
-            // Animate house falling with more impact
-            const duration = 400; // Slightly faster fall
+            // Animate house falling
+            const duration = 400;
             const startY = house.group.position.y;
-            const endY = 0.2; // Final height
+            const endY = 0.2;
             const startTime = Date.now();
             
             const animateHouse = () => {
                 const elapsed = Date.now() - startTime;
                 const progress = Math.min(elapsed / duration, 1);
                 
-                // Modified easing function for more impact
                 const easeOutBounce = (x) => {
                     const n1 = 7.5625;
                     const d1 = 2.75;
@@ -206,30 +205,64 @@ window.addEventListener('click', () => {
                 
                 if (progress < 1) {
                     requestAnimationFrame(animateHouse);
+                } else {
+                    // After settlement is placed, mark it and show available road locations
+                    board.markSettlement(cornerKey);
+                    isPlacingSettlement = false;
+                    board.hideCorners();
+                    highlightedCorners = [];
+                    
+                    // Automatically switch to road placement mode
+                    isPlacingRoad = true;
+                    board.highlightAvailableEdges(highlightedEdges);
                 }
             };
             
             animateHouse();
-            
-            // Mark corner as occupied
-            board.markSettlement(cornerKey);
-            
-            // Hide corners and exit settlement placement mode
-            isPlacingSettlement = false;
-            board.hideCorners();
-            highlightedCorners = [];
             break;
-        } else if (isPlacingRoad && intersect.object.userData.isEdge) {
-            const edgeKey = intersect.object.userData.edgeKey;
-            const edgeData = board.edges.get(edgeKey);
+        } else if (isPlacingRoad) {
+            // Check if we clicked on a glow mesh or its parent group
+            let edgeData = null;
+            if (intersect.object.userData.isEdge) {
+                edgeData = intersect.object.userData;
+            } else if (intersect.object.parent && intersect.object.parent.userData.isEdge) {
+                edgeData = intersect.object.parent.userData;
+            }
             
-            if (!edgeData || edgeData.hasRoad) continue;
+            if (!edgeData) continue;
             
-            // Place road with animation
+            const edgeKey = edgeData.edgeKey;
+            if (!board.isValidRoadLocation(edgeKey)) continue;
+            
+            // Get corner positions for exact placement
+            const startCorner = board.corners.get(edgeData.start);
+            const endCorner = board.corners.get(edgeData.end);
+            
+            if (!startCorner || !endCorner) continue;
+            
+            // Calculate exact position and rotation
+            const direction = new THREE.Vector3()
+                .subVectors(endCorner.position, startCorner.position);
+            const length = direction.length();
+            direction.normalize();
+            
+            // Calculate the midpoint between corners for road placement
+            const midpoint = new THREE.Vector3()
+                .addVectors(startCorner.position, endCorner.position)
+                .multiplyScalar(0.5);
+            
+            // Create and position road
             const road = new Road();
-            road.group.position.copy(intersect.object.position);
-            road.group.rotation.y = intersect.object.rotation.y;
-            road.group.position.y += 0.5; // Start from above
+            road.setLength(length);
+            
+            // Position at midpoint and align with edge
+            road.group.position.copy(midpoint);
+            road.group.position.y = 0; // Place exactly on board surface
+            
+            // Calculate rotation to align with edge
+            const angle = Math.atan2(direction.x, direction.z);
+            road.group.rotation.y = -angle;
+            
             scene.add(road.group);
             
             // Play hammer sound effect
@@ -237,16 +270,17 @@ window.addEventListener('click', () => {
             roadSound.play();
             
             // Animate road falling
-            const duration = 300; // Faster fall for road
-            const startY = road.group.position.y;
-            const endY = 0.1; // Final height
+            const duration = 300;
+            const startY = 0.5;
+            const endY = 0; // End exactly on board surface
             const startTime = Date.now();
+            
+            road.group.position.y = startY; // Start position
             
             const animateRoad = () => {
                 const elapsed = Date.now() - startTime;
                 const progress = Math.min(elapsed / duration, 1);
                 
-                // Easing function for road placement
                 const easeOutBounce = (x) => {
                     const n1 = 7.5625;
                     const d1 = 2.75;
@@ -265,18 +299,15 @@ window.addEventListener('click', () => {
                 
                 if (progress < 1) {
                     requestAnimationFrame(animateRoad);
+                } else {
+                    // After road is placed, mark it and update available edges
+                    board.markRoad(edgeKey);
+                    board.hideEdges();
+                    board.highlightAvailableEdges(highlightedEdges);
                 }
             };
             
             animateRoad();
-            
-            // Mark edge as having a road
-            edgeData.hasRoad = true;
-            
-            // Hide edges and exit road placement mode
-            isPlacingRoad = false;
-            board.hideEdges();
-            highlightedEdges = [];
             break;
         }
     }
@@ -291,6 +322,9 @@ function animate() {
     
     // Update flag rotations
     board.updateFlagRotations(camera.position);
+    
+    // Update edge indicators
+    board.updateEdgeIndicators();
     
     renderer.render(scene, camera);
 }

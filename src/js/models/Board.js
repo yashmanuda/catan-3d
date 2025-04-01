@@ -445,10 +445,7 @@ export class Board {
 
     isValidRoadLocation(edgeKey) {
         const edgeData = this.edges.get(edgeKey);
-        if (!edgeData) return false;
-        
-        // Check if edge already has a road
-        if (edgeData.hasRoad) return false;
+        if (!edgeData || edgeData.hasRoad) return false;
         
         // Get connected corners
         const startCorner = this.corners.get(edgeData.start);
@@ -456,9 +453,13 @@ export class Board {
         
         if (!startCorner || !endCorner) return false;
         
-        // Road must connect to either a settlement or another road
+        // Valid if either:
+        // 1. Connected to a settlement
         const hasSettlementConnection = startCorner.hasSettlement || endCorner.hasSettlement;
-        const hasRoadConnection = this.hasConnectedRoad(edgeKey, startCorner) || this.hasConnectedRoad(edgeKey, endCorner);
+        
+        // 2. Connected to an existing road
+        const hasRoadConnection = this.hasConnectedRoad(edgeKey, startCorner) || 
+                                this.hasConnectedRoad(edgeKey, endCorner);
         
         return hasSettlementConnection || hasRoadConnection;
     }
@@ -475,6 +476,12 @@ export class Board {
                     indicator.userData.edgeKey = edgeKey;
                     indicator.userData.isEdge = true;
                     this.group.add(indicator);
+                    this.edgeIndicators.set(edgeKey, {
+                        mesh: indicator,
+                        materials: {
+                            glow: indicator.children[0].material
+                        }
+                    });
                     highlightedEdges.push(indicator);
                 }
             }
@@ -482,30 +489,68 @@ export class Board {
     }
 
     createEdgeIndicator(edgeData) {
-        const group = new THREE.Group();
+        // Get the corner positions
+        const startCorner = this.corners.get(edgeData.start);
+        const endCorner = this.corners.get(edgeData.end);
         
-        // Create glow effect
-        const glowGeometry = new THREE.BoxGeometry(edgeData.length, 0.08, 0.08);
+        if (!startCorner || !endCorner) return null;
+        
+        // Calculate exact dimensions and position
+        const length = startCorner.position.distanceTo(endCorner.position);
+        const direction = new THREE.Vector3()
+            .subVectors(endCorner.position, startCorner.position)
+            .normalize();
+        
+        // Create glow effect aligned with the edge
+        const glowGeometry = new THREE.BoxGeometry(length, 0.08, 0.08);
         const glowMaterial = new THREE.MeshStandardMaterial({
-            color: 0x00ff88,
+            color: 0xffff00,
             transparent: true,
             opacity: 0.4,
-            emissive: 0x00ff88,
-            emissiveIntensity: 0.8
+            emissive: 0xffff00,
+            emissiveIntensity: 0.6
         });
         
         const glow = new THREE.Mesh(glowGeometry, glowMaterial);
-        group.add(glow);
         
-        // Position and rotate the indicator
-        group.position.copy(edgeData.position);
-        group.position.y = 0.15;
+        // Position at midpoint between corners
+        const midpoint = new THREE.Vector3()
+            .addVectors(startCorner.position, endCorner.position)
+            .multiplyScalar(0.5);
         
-        // Calculate rotation from direction
-        const angle = Math.atan2(edgeData.direction.z, edgeData.direction.x);
+        const group = new THREE.Group();
+        group.position.copy(midpoint);
+        group.position.y = 0.05; // Slightly above the board
+        
+        // Calculate rotation to align with the edge
+        const angle = Math.atan2(direction.z, direction.x);
         group.rotation.y = angle;
         
+        // Center the glow mesh
+        glow.position.x = 0;
+        
+        group.add(glow);
+        
+        // Store edge data in both group and glow mesh
+        const edgeInfo = {
+            isEdge: true,
+            edgeKey: edgeData.id,
+            start: edgeData.start,
+            end: edgeData.end
+        };
+        
+        group.userData = edgeInfo;
+        glow.userData = edgeInfo;
+        
         return group;
+    }
+
+    hideEdges() {
+        // Remove all edge indicators
+        this.edgeIndicators.forEach((data, edge) => {
+            this.group.remove(data.mesh);
+        });
+        this.edgeIndicators.clear();
     }
 
     setupGrid() {
@@ -845,22 +890,16 @@ export class Board {
     updateEdgeIndicators() {
         const time = Date.now() * 0.001;
         
-        this.edgeIndicators.forEach((indicator, edgeKey) => {
-            // Pulse the glow effect
-            const pulseIntensity = 0.8 + Math.sin(time * 2) * 0.2;
-            const pulseOpacity = 0.5 + Math.sin(time * 2) * 0.2;
-            
-            indicator.materials.glow.emissiveIntensity = pulseIntensity;
-            indicator.materials.glow.opacity = pulseOpacity;
+        this.edgeIndicators.forEach((data) => {
+            if (data.materials && data.materials.glow) {
+                // Pulse the glow effect
+                const pulseIntensity = 0.5 + Math.sin(time * 2) * 0.3;
+                const pulseOpacity = 0.4 + Math.sin(time * 2) * 0.2;
+                
+                data.materials.glow.emissiveIntensity = pulseIntensity;
+                data.materials.glow.opacity = pulseOpacity;
+            }
         });
-    }
-
-    hideEdges() {
-        // Remove all edge indicators
-        this.edgeIndicators.forEach((data, edge) => {
-            this.group.remove(data.mesh);
-        });
-        this.edgeIndicators.clear();
     }
 
     getCornerKey(position) {
@@ -869,13 +908,8 @@ export class Board {
         return `${x},${z}`;
     }
 
-    getEdgeKey(start, end) {
-        const startKey = this.getCornerKey(start);
-        const endKey = this.getCornerKey(end);
-        return startKey < endKey ? `${startKey}-${endKey}` : `${endKey}-${startKey}`;
-    }
-
     hasConnectedRoad(currentEdgeKey, corner) {
+        // Check all edges connected to this corner except the current edge
         for (const edgeKey of corner.connectedEdges) {
             if (edgeKey !== currentEdgeKey) {
                 const edge = this.edges.get(edgeKey);
@@ -887,64 +921,10 @@ export class Board {
         return false;
     }
 
-    createEdge(corner1, corner2) {
-        const key = this.getEdgeKey(corner1, corner2);
-        if (this.edges.has(key)) {
-            return this.edges.get(key);
+    markRoad(edgeKey) {
+        const edgeData = this.edges.get(edgeKey);
+        if (edgeData) {
+            edgeData.hasRoad = true;
         }
-
-        const edge = {
-            corner1,
-            corner2,
-            hasRoad: false,
-            position: new THREE.Vector3().addVectors(corner1.position, corner2.position).multiplyScalar(0.5),
-            rotation: Math.atan2(
-                corner2.position.z - corner1.position.z,
-                corner2.position.x - corner1.position.x
-            )
-        };
-
-        this.edges.set(key, edge);
-        return edge;
-    }
-
-    highlightAvailableEdges(highlightedEdges) {
-        // Clear previous highlights
-        this.hideEdges();
-        
-        // Find and highlight available edges
-        this.edges.forEach(edge => {
-            if (!edge.hasRoad) {
-                const newEdge = this.createEdgeMarker(edge);
-                newEdge.material.color.setHex(0x00FF00); // Green highlight
-                this.group.add(newEdge);
-                highlightedEdges.push(newEdge);
-            }
-        });
-    }
-
-    createEdgeMarker(edge) {
-        const geometry = new THREE.BoxGeometry(0.8, 0.1, 0.1);
-        const material = new THREE.MeshStandardMaterial({ 
-            color: 0x808080,
-            metalness: 0.5,
-            roughness: 0.5
-        });
-        const marker = new THREE.Mesh(geometry, material);
-        marker.position.copy(edge.position);
-        marker.rotation.y = edge.rotation;
-        marker.userData.isEdge = true;
-        marker.userData.edge = edge;
-        marker.castShadow = true;
-        marker.receiveShadow = true;
-        return marker;
-    }
-
-    hideEdges() {
-        this.edges.forEach(edge => {
-            if (edge.marker) {
-                edge.marker.visible = false;
-            }
-        });
     }
 } 

@@ -4,6 +4,7 @@ import { RotationControls } from './utils/RotationControls.js';
 import { MenuBar } from './utils/MenuBar.js';
 import { House } from './models/House.js';
 import { Road } from './models/Road.js';
+import { ResourceSection } from './models/ResourceSection.js';
 
 // Scene setup
 const scene = new THREE.Scene();
@@ -257,11 +258,11 @@ window.addEventListener('click', () => {
             
             // Position at midpoint and align with edge
             road.group.position.copy(midpoint);
-            road.group.position.y = 0; // Place exactly on board surface
+            road.group.position.y = 0.25; // Position above the hexagon edge
             
-            // Calculate rotation to align with edge
+            // Calculate rotation to align with edge exactly
             const angle = Math.atan2(direction.x, direction.z);
-            road.group.rotation.y = -angle;
+            road.group.rotation.y = angle; // Remove the PI/2 rotation
             
             scene.add(road.group);
             
@@ -271,8 +272,8 @@ window.addEventListener('click', () => {
             
             // Animate road falling
             const duration = 300;
-            const startY = 0.5;
-            const endY = 0; // End exactly on board surface
+            const startY = 1.0; // Start higher
+            const endY = 0.25; // End at the correct height above the hexagon edge
             const startTime = Date.now();
             
             road.group.position.y = startY; // Start position
@@ -423,3 +424,7 @@ window.addEventListener('keydown', (event) => {
         }
     }
 });
+
+// Initialize resource section
+const resourceSection = new ResourceSection();
+document.body.appendChild(resourceSection.element);

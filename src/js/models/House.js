@@ -1,52 +1,55 @@
 import * as THREE from 'three';
 
 export class House {
-    constructor(color = 0x8B4513) {
+    constructor(color = 0x4B0082) { // Indigo purple
         this.group = new THREE.Group();
 
-        // House body (cube)
-        const bodyGeometry = new THREE.BoxGeometry(1, 1.2, 1);
-        const bodyMaterial = new THREE.MeshStandardMaterial({ color });
-        const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-        body.castShadow = true;
-        body.receiveShadow = true;
-        this.group.add(body);
+        // Materials with enhanced finish
+        const wallMaterial = new THREE.MeshStandardMaterial({
+            color: color,
+            roughness: 0.5,
+            metalness: 0.3,
+            envMapIntensity: 0.8
+        });
 
-        // Roof (cone)
-        const roofGeometry = new THREE.ConeGeometry(0.8, 0.8, 4);
-        const roofMaterial = new THREE.MeshStandardMaterial({ color: 0x8B0000 }); // Dark red
+        const roofMaterial = new THREE.MeshStandardMaterial({
+            color: 0x2E0854, // Darker purple for roof
+            roughness: 0.6,
+            metalness: 0.2,
+            envMapIntensity: 0.7
+        });
+
+        // Base of the hut (hexagonal)
+        const baseGeometry = new THREE.CylinderGeometry(0.25, 0.25, 0.4, 6);
+        const base = new THREE.Mesh(baseGeometry, wallMaterial);
+        base.position.y = 0.2;
+        this.group.add(base);
+
+        // Roof (hexagonal cone)
+        const roofGeometry = new THREE.ConeGeometry(0.35, 0.35, 6);
         const roof = new THREE.Mesh(roofGeometry, roofMaterial);
-        roof.position.y = 1;
-        roof.castShadow = true;
-        roof.receiveShadow = true;
+        roof.position.y = 0.55;
         this.group.add(roof);
 
-        // Door
-        const doorGeometry = new THREE.PlaneGeometry(0.4, 0.6);
-        const doorMaterial = new THREE.MeshStandardMaterial({ color: 0x4A4A4A }); // Dark gray
-        const door = new THREE.Mesh(doorGeometry, doorMaterial);
-        door.position.z = 0.51; // Slightly in front of the body
-        door.position.y = 0.3;
-        door.castShadow = true;
-        door.receiveShadow = true;
-        this.group.add(door);
-
-        // Window
-        const windowGeometry = new THREE.PlaneGeometry(0.3, 0.3);
-        const windowMaterial = new THREE.MeshStandardMaterial({ 
-            color: 0x87CEEB,
-            transparent: true,
-            opacity: 0.8
+        // Enable shadows
+        this.group.traverse((object) => {
+            if (object instanceof THREE.Mesh) {
+                object.castShadow = true;
+                object.receiveShadow = true;
+            }
         });
-        const window = new THREE.Mesh(windowGeometry, windowMaterial);
-        window.position.z = 0.51;
-        window.position.y = 0.8;
-        window.position.x = 0.3;
-        window.castShadow = true;
-        window.receiveShadow = true;
-        this.group.add(window);
 
         // Scale the entire house
-        this.group.scale.set(0.25, 0.25, 0.25);
+        this.group.scale.set(0.7, 0.7, 0.7);
+    }
+
+    setColor(color) {
+        this.group.traverse((object) => {
+            if (object instanceof THREE.Mesh && object.material.color) {
+                if (object.material.color.getHex() === 0x4B0082) {
+                    object.material.color.setHex(color);
+                }
+            }
+        });
     }
 } 

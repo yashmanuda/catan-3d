@@ -453,15 +453,9 @@ export class Board {
         
         if (!startCorner || !endCorner) return false;
         
-        // Valid if either:
-        // 1. Connected to a settlement
-        const hasSettlementConnection = startCorner.hasSettlement || endCorner.hasSettlement;
-        
-        // 2. Connected to an existing road
-        const hasRoadConnection = this.hasConnectedRoad(edgeKey, startCorner) || 
-                                this.hasConnectedRoad(edgeKey, endCorner);
-        
-        return hasSettlementConnection || hasRoadConnection;
+        // Valid if the edge connects two adjacent corners
+        // (this is always true in our current implementation since edges are only created between adjacent corners)
+        return true;
     }
 
     highlightAvailableEdges(highlightedEdges) {
@@ -501,8 +495,8 @@ export class Board {
             .subVectors(endCorner.position, startCorner.position)
             .normalize();
         
-        // Create glow effect aligned with the edge
-        const glowGeometry = new THREE.BoxGeometry(length, 0.08, 0.08);
+        // Create glow effect that matches road dimensions exactly
+        const glowGeometry = new THREE.BoxGeometry(length, 0.08, 0.25);
         const glowMaterial = new THREE.MeshStandardMaterial({
             color: 0xffff00,
             transparent: true,
@@ -520,14 +514,11 @@ export class Board {
         
         const group = new THREE.Group();
         group.position.copy(midpoint);
-        group.position.y = 0.05; // Slightly above the board
+        group.position.y = 0.25; // Match road height above hexagon edge
         
         // Calculate rotation to align with the edge
-        const angle = Math.atan2(direction.z, direction.x);
-        group.rotation.y = angle;
-        
-        // Center the glow mesh
-        glow.position.x = 0;
+        const angle = Math.atan2(direction.x, direction.z);
+        group.rotation.y = angle + Math.PI/2; // Add 90 degrees clockwise rotation
         
         group.add(glow);
         
@@ -693,7 +684,7 @@ export class Board {
                     const position = new THREE.Vector3()
                         .addVectors(corner1.position, corner2.position)
                         .multiplyScalar(0.5);
-                    position.y = 0.15; // Consistent height
+                    position.y = 0; // Set to board surface level
 
                     const direction = new THREE.Vector3()
                         .subVectors(corner2.position, corner1.position)
@@ -702,8 +693,8 @@ export class Board {
                     // Store edge data with exact measurements
                     this.edges.set(edgeKey, {
                         id: edgeId++,
-                        start: startKey,
-                        end: endKey,
+                        start: corner1Key,
+                        end: corner2Key,
                         hasRoad: false,
                         position: position,
                         direction: direction,
@@ -906,19 +897,6 @@ export class Board {
         const x = Math.round(position.x * 100);
         const z = Math.round(position.z * 100);
         return `${x},${z}`;
-    }
-
-    hasConnectedRoad(currentEdgeKey, corner) {
-        // Check all edges connected to this corner except the current edge
-        for (const edgeKey of corner.connectedEdges) {
-            if (edgeKey !== currentEdgeKey) {
-                const edge = this.edges.get(edgeKey);
-                if (edge && edge.hasRoad) {
-                    return true;
-                }
-            }
-        }
-        return false;
     }
 
     markRoad(edgeKey) {

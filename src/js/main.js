@@ -5,6 +5,7 @@ import { MenuBar } from './utils/MenuBar.js';
 import { House } from './models/House.js';
 import { Road } from './models/Road.js';
 import { ResourceSection } from './models/ResourceSection.js';
+import { DiceBox } from './models/DiceBox.js';
 
 // Scene setup
 const scene = new THREE.Scene();
@@ -101,6 +102,9 @@ scene.add(water);
 const board = new Board();
 scene.add(board.group);
 
+// Create dice box
+const diceBox = new DiceBox();
+
 // Sound effects
 const houseSound = new Audio('/src/assets/hammer_sound.wav');
 houseSound.volume = 0.4;
@@ -108,11 +112,15 @@ houseSound.volume = 0.4;
 const roadSound = new Audio('/src/assets/hammer_sound.wav');
 roadSound.volume = 0.4;
 
+const diceSound = new Audio('/src/assets/dice_roll.wav');
+diceSound.volume = 0.4;
+
 // Game state
 let isPlacingSettlement = false;
 let isPlacingRoad = false;
 let highlightedCorners = [];
 let highlightedEdges = [];
+let isAnimationInProgress = false;
 
 // Raycaster for mouse interaction
 const raycaster = new THREE.Raycaster();
@@ -132,187 +140,373 @@ window.addEventListener('mousemove', (event) => {
     mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 });
 
-// Menu bar setup
-const menuBar = new MenuBar(
-    () => {
-        rotationControls.startRotation();
-    },
-    () => {
-        rotationControls.stopRotation();
-    },
-    () => {
-        isPlacingSettlement = true;
-        isPlacingRoad = false;
-        board.hideEdges(); // Hide any existing edge highlights
-        board.highlightAvailableCorners(highlightedCorners);
-    },
-    () => {
-        isPlacingSettlement = false;
-        isPlacingRoad = true;
-        board.hideCorners(); // Hide any existing corner highlights
-        board.highlightAvailableEdges(highlightedEdges);
+// Create menu bar
+const menuBar = document.createElement('div');
+menuBar.style.cssText = `
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 10px;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(8px);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+`;
+
+const buttonStyle = `
+    padding: 10px 15px;
+    font-family: 'Poppins', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    color: white;
+    background: #4CAF50;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    min-width: 40px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+`;
+
+const buttonHoverStyle = `
+    background: #45a049;
+`;
+
+const buttonActiveStyle = `
+    background: #2E7D32;
+`;
+
+const createButton = (text, onClick) => {
+    const button = document.createElement('button');
+    button.textContent = text;
+    button.style.cssText = buttonStyle;
+    
+    button.addEventListener('mouseover', () => {
+        if (!button.disabled) {
+            button.style.background = '#45a049';
+        }
+    });
+    
+    button.addEventListener('mouseout', () => {
+        if (!button.disabled) {
+            button.style.background = '#4CAF50';
+        }
+    });
+    
+    button.addEventListener('click', onClick);
+    return button;
+};
+
+// Create rotation buttons with correct symbols
+const rotateCCWButton = createButton('⟲', () => {});
+rotateCCWButton.style.fontSize = '20px';
+
+const rotateCWButton = createButton('⟳', () => {});
+rotateCWButton.style.fontSize = '20px';
+
+// Long press handlers for rotation
+let longPressTimer;
+const longPressDelay = 150; // ms before rotation starts
+
+rotateCWButton.addEventListener('mousedown', () => {
+    longPressTimer = setTimeout(() => {
+        rotationControls.startRotation(-1); // Counter-clockwise rotation for CW button
+        disableAllButtonsExcept(rotateCWButton);
+    }, longPressDelay);
+});
+
+rotateCCWButton.addEventListener('mousedown', () => {
+    longPressTimer = setTimeout(() => {
+        rotationControls.startRotation(1); // Clockwise rotation for CCW button
+        disableAllButtonsExcept(rotateCCWButton);
+    }, longPressDelay);
+});
+
+// Clear timer and stop rotation on mouse up
+rotateCWButton.addEventListener('mouseup', () => {
+    clearTimeout(longPressTimer);
+    rotationControls.stopRotation();
+    enableAllButtons();
+});
+
+rotateCCWButton.addEventListener('mouseup', () => {
+    clearTimeout(longPressTimer);
+    rotationControls.stopRotation();
+    enableAllButtons();
+});
+
+// Handle mouse leave
+rotateCWButton.addEventListener('mouseleave', () => {
+    clearTimeout(longPressTimer);
+    rotationControls.stopRotation();
+    enableAllButtons();
+});
+
+rotateCCWButton.addEventListener('mouseleave', () => {
+    clearTimeout(longPressTimer);
+    rotationControls.stopRotation();
+    enableAllButtons();
+});
+
+// Touch events for mobile
+rotateCWButton.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    longPressTimer = setTimeout(() => {
+        rotationControls.startRotation(-1);
+        disableAllButtonsExcept(rotateCWButton);
+    }, longPressDelay);
+});
+
+rotateCCWButton.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    longPressTimer = setTimeout(() => {
+        rotationControls.startRotation(1);
+        disableAllButtonsExcept(rotateCCWButton);
+    }, longPressDelay);
+});
+
+rotateCWButton.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    clearTimeout(longPressTimer);
+    rotationControls.stopRotation();
+    enableAllButtons();
+});
+
+rotateCCWButton.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    clearTimeout(longPressTimer);
+    rotationControls.stopRotation();
+    enableAllButtons();
+});
+
+// Create other buttons
+const placeSettlementButton = createButton('Place Settlement', () => {
+    if (board.mode === 'settlement') {
+        enableAllButtons();
+        board.hideCorners();
+        board.setMode(null);
+    } else {
+        disableAllButtonsExcept(placeSettlementButton);
+        board.setMode('settlement');
+        board.highlightAvailableCorners();
     }
-);
+});
 
-// Handle mouse click
-window.addEventListener('click', () => {
-    if (!isPlacingSettlement && !isPlacingRoad) return;
+const placeRoadButton = createButton('Place Road', () => {
+    if (board.mode === 'road') {
+        enableAllButtons();
+        board.hideEdges();
+        board.setMode(null);
+    } else {
+        disableAllButtonsExcept(placeRoadButton);
+        board.setMode('road');
+        board.highlightAvailableEdges();
+    }
+});
 
-    raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObjects(scene.children, true);
+const rollDiceButton = createButton('Roll Dice', () => {
+    if (diceBox.isRolling) return;
+    
+    diceBox.rollDice().then(result => {
+        console.log('Dice roll:', result);
+        
+        // Skip resource collection for 7
+        if (result === 7) {
+            console.log('Rolled 7 - skipping resource collection');
+            return;
+        }
+        
+        // Collect resources based on dice roll
+        const resourcesCollected = board.collectResources(result);
+        console.log('Resources collected:', resourcesCollected);
+        
+        // Update resource counts in the UI
+        resourcesCollected.forEach((count, resourceType) => {
+            console.log(`Adding ${count} ${resourceType}`);
+            resourceSection.updateResource(resourceType, count);
+        });
+    }).catch(error => {
+        console.error('Error during dice roll:', error);
+    });
+});
 
-    for (const intersect of intersects) {
-        if (isPlacingSettlement && intersect.object.userData.isCorner) {
-            const cornerKey = board.getCornerKey(intersect.object.position);
-            const cornerData = board.corners.get(cornerKey);
-            
-            if (!cornerData || cornerData.hasSettlement) continue;
-            
-            // Place settlement with animation
-            const house = new House();
-            house.group.position.copy(intersect.point);
-            house.group.position.y += 2; // Start from above
-            scene.add(house.group);
-            
-            // Play hammer sound effect
-            houseSound.currentTime = 0;
-            houseSound.play();
-            
-            // Animate house falling
-            const duration = 400;
-            const startY = house.group.position.y;
-            const endY = 0.2;
-            const startTime = Date.now();
-            
-            const animateHouse = () => {
-                const elapsed = Date.now() - startTime;
-                const progress = Math.min(elapsed / duration, 1);
-                
-                const easeOutBounce = (x) => {
-                    const n1 = 7.5625;
-                    const d1 = 2.75;
-                    if (x < 1 / d1) {
-                        return n1 * x * x;
-                    } else if (x < 2 / d1) {
-                        return n1 * (x -= 1.5 / d1) * x + 0.75;
-                    } else if (x < 2.5 / d1) {
-                        return n1 * (x -= 2.25 / d1) * x + 0.9375;
-                    } else {
-                        return n1 * (x -= 2.625 / d1) * x + 0.984375;
-                    }
-                };
-                
-                house.group.position.y = startY - (startY - endY) * easeOutBounce(progress);
-                
-                if (progress < 1) {
-                    requestAnimationFrame(animateHouse);
-                } else {
-                    // After settlement is placed, mark it and show available road locations
-                    board.markSettlement(cornerKey);
-                    isPlacingSettlement = false;
-                    board.hideCorners();
-                    highlightedCorners = [];
-                    
-                    // Automatically switch to road placement mode
-                    isPlacingRoad = true;
-                    board.highlightAvailableEdges(highlightedEdges);
-                }
-            };
-            
-            animateHouse();
-            break;
-        } else if (isPlacingRoad) {
-            // Check if we clicked on a glow mesh or its parent group
-            let edgeData = null;
+function disableAllButtonsExcept(activeButton) {
+    [rotateCWButton, rotateCCWButton, placeSettlementButton, placeRoadButton, rollDiceButton].forEach(button => {
+        if (button !== activeButton) {
+            button.disabled = true;
+            button.style.opacity = '0.5';
+            button.style.cursor = 'not-allowed';
+            button.style.background = '#808080';
+        } else {
+            button.disabled = false;
+            button.style.opacity = '1';
+            button.style.cursor = 'pointer';
+            button.style.background = '#2E7D32';
+        }
+    });
+}
+
+function enableAllButtons() {
+    [rotateCWButton, rotateCCWButton, placeSettlementButton, placeRoadButton, rollDiceButton].forEach(button => {
+        button.disabled = false;
+        button.style.opacity = '1';
+        button.style.cursor = 'pointer';
+        button.style.cssText = buttonStyle;
+    });
+    board.setMode(null);
+}
+
+// Update the click handler for settlements and roads
+renderer.domElement.addEventListener('click', (event) => {
+    if (isAnimationInProgress) return;
+
+    const rect = renderer.domElement.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    const y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+    raycaster.setFromCamera(new THREE.Vector2(x, y), camera);
+
+    if (board.mode === 'road') {
+        const intersects = raycaster.intersectObjects(scene.children, true);
+        for (const intersect of intersects) {
             if (intersect.object.userData.isEdge) {
-                edgeData = intersect.object.userData;
-            } else if (intersect.object.parent && intersect.object.parent.userData.isEdge) {
-                edgeData = intersect.object.parent.userData;
-            }
-            
-            if (!edgeData) continue;
-            
-            const edgeKey = edgeData.edgeKey;
-            if (!board.isValidRoadLocation(edgeKey)) continue;
-            
-            // Get corner positions for exact placement
-            const startCorner = board.corners.get(edgeData.start);
-            const endCorner = board.corners.get(edgeData.end);
-            
-            if (!startCorner || !endCorner) continue;
-            
-            // Calculate exact position and rotation
-            const direction = new THREE.Vector3()
-                .subVectors(endCorner.position, startCorner.position);
-            const length = direction.length();
-            direction.normalize();
-            
-            // Calculate the midpoint between corners for road placement
-            const midpoint = new THREE.Vector3()
-                .addVectors(startCorner.position, endCorner.position)
-                .multiplyScalar(0.5);
-            
-            // Create and position road
-            const road = new Road();
-            road.setLength(length);
-            
-            // Position at midpoint and align with edge
-            road.group.position.copy(midpoint);
-            road.group.position.y = 0.25; // Position above the hexagon edge
-            
-            // Calculate rotation to align with edge exactly
-            const angle = Math.atan2(direction.x, direction.z);
-            road.group.rotation.y = angle; // Remove the PI/2 rotation
-            
-            scene.add(road.group);
-            
-            // Play hammer sound effect
-            roadSound.currentTime = 0;
-            roadSound.play();
-            
-            // Animate road falling
-            const duration = 300;
-            const startY = 1.0; // Start higher
-            const endY = 0.25; // End at the correct height above the hexagon edge
-            const startTime = Date.now();
-            
-            road.group.position.y = startY; // Start position
-            
-            const animateRoad = () => {
-                const elapsed = Date.now() - startTime;
-                const progress = Math.min(elapsed / duration, 1);
-                
-                const easeOutBounce = (x) => {
-                    const n1 = 7.5625;
-                    const d1 = 2.75;
-                    if (x < 1 / d1) {
-                        return n1 * x * x;
-                    } else if (x < 2 / d1) {
-                        return n1 * (x -= 1.5 / d1) * x + 0.75;
-                    } else if (x < 2.5 / d1) {
-                        return n1 * (x -= 2.25 / d1) * x + 0.9375;
-                    } else {
-                        return n1 * (x -= 2.625 / d1) * x + 0.984375;
+                const edgeKey = intersect.object.userData.edgeKey;
+                if (board.isValidRoadLocation(edgeKey)) {
+                    isAnimationInProgress = true;
+
+                    // Get edge data
+                    const edge = board.edges.get(edgeKey);
+                    const startCorner = board.corners.get(edge.start);
+                    const endCorner = board.corners.get(edge.end);
+
+                    // Create road
+                    const road = new Road();
+                    
+                    // Calculate direction and length
+                    const direction = new THREE.Vector3()
+                        .subVectors(endCorner.position, startCorner.position);
+                    const length = direction.length();
+                    
+                    // Set road length
+                    road.setLength(length);
+                    
+                    // Position at midpoint
+                    const midpoint = new THREE.Vector3()
+                        .addVectors(startCorner.position, endCorner.position)
+                        .multiplyScalar(0.5);
+                    road.group.position.copy(midpoint);
+                    road.group.position.y = 2; // Start position for animation
+                    
+                    // Calculate rotation
+                    const angle = Math.atan2(direction.x, direction.z);
+                    road.group.rotation.y = angle;
+                    
+                    // Add to scene
+                    scene.add(road.group);
+                    
+                    // Play sound
+                    roadSound.currentTime = 0;
+                    roadSound.play().catch(e => console.warn('Audio play failed:', e));
+                    
+                    // Animate placement
+                    const startY = road.group.position.y;
+                    const endY = 0.15;
+                    const duration = 500;
+                    const startTime = Date.now();
+                    
+                    function dropAnimation() {
+                        const elapsed = Date.now() - startTime;
+                        const progress = Math.min(elapsed / duration, 1);
+                        
+                        // Bounce easing
+                        const bounce = Math.sin(progress * Math.PI) * Math.exp(-progress * 3);
+                        road.group.position.y = endY + (startY - endY) * bounce;
+                        
+                        if (progress < 1) {
+                            requestAnimationFrame(dropAnimation);
+                        } else {
+                            road.group.position.y = endY;
+                            board.markRoad(edgeKey);
+                            board.hideEdges();
+                            board.highlightAvailableEdges();
+                            isAnimationInProgress = false;
+                        }
                     }
-                };
-                
-                road.group.position.y = startY - (startY - endY) * easeOutBounce(progress);
-                
-                if (progress < 1) {
-                    requestAnimationFrame(animateRoad);
-                } else {
-                    // After road is placed, mark it and update available edges
-                    board.markRoad(edgeKey);
-                    board.hideEdges();
-                    board.highlightAvailableEdges(highlightedEdges);
+                    
+                    dropAnimation();
+                    return;
                 }
-            };
-            
-            animateRoad();
-            break;
+            }
+        }
+    } else if (board.mode === 'settlement') {
+        const intersects = raycaster.intersectObjects(scene.children, true);
+        for (const intersect of intersects) {
+            if (intersect.object.userData.isCorner) {
+                const cornerKey = board.getCornerKey(intersect.object.position);
+                if (board.isValidSettlementLocation(intersect.object)) {
+                    isAnimationInProgress = true;
+
+                    // Create settlement
+                    const house = new House();
+                    house.group.position.copy(intersect.object.position);
+                    house.group.position.y = 2; // Start position for animation
+                    scene.add(house.group);
+
+                    // Play sound
+                    houseSound.currentTime = 0;
+                    houseSound.play().catch(e => console.warn('Audio play failed:', e));
+
+                    // Animate placement
+                    const startY = house.group.position.y;
+                    const endY = 0.15;
+                    const duration = 500;
+                    const startTime = Date.now();
+
+                    function dropAnimation() {
+                        const elapsed = Date.now() - startTime;
+                        const progress = Math.min(elapsed / duration, 1);
+
+                        // Bounce easing
+                        const bounce = Math.sin(progress * Math.PI) * Math.exp(-progress * 3);
+                        house.group.position.y = endY + (startY - endY) * bounce;
+
+                        if (progress < 1) {
+                            requestAnimationFrame(dropAnimation);
+                        } else {
+                            house.group.position.y = endY;
+                            board.markSettlement(cornerKey);
+                            board.hideCorners();
+                            enableAllButtons();
+                            board.setMode(null);
+                            isAnimationInProgress = false;
+                        }
+                    }
+
+                    dropAnimation();
+                    return;
+                }
+            }
         }
     }
 });
+
+// Add buttons to menu bar
+menuBar.appendChild(rotateCCWButton);
+menuBar.appendChild(rotateCWButton);
+menuBar.appendChild(placeSettlementButton);
+menuBar.appendChild(placeRoadButton);
+menuBar.appendChild(rollDiceButton);
+document.body.appendChild(menuBar);
 
 // Animation loop
 function animate() {

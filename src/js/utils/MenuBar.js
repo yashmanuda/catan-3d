@@ -1,5 +1,5 @@
 export class MenuBar {
-    constructor(onRotateStart, onRotateEnd, onSettlementClick, onRoadClick) {
+    constructor(onRotateStart, onRotateEnd, onSettlementClick, onRoadClick, onRollDiceClick) {
         const menuBar = document.createElement('div');
         menuBar.style.position = 'fixed';
         menuBar.style.bottom = '20px';
@@ -26,48 +26,56 @@ export class MenuBar {
         const roadButton = document.createElement('button');
         roadButton.textContent = '🛣️ Place Road';
         roadButton.className = 'menu-button';
+
+        // Roll Dice button
+        const rollDiceButton = document.createElement('button');
+        rollDiceButton.textContent = '🎲 Roll Dice';
+        rollDiceButton.className = 'menu-button';
         
         // Style buttons
-        const buttons = [rotateButton, settlementButton, roadButton];
+        const buttons = [rotateButton, settlementButton, roadButton, rollDiceButton];
         buttons.forEach(button => {
             button.style.padding = '10px 20px';
+            button.style.fontSize = '16px';
             button.style.border = 'none';
             button.style.borderRadius = '5px';
             button.style.backgroundColor = '#4CAF50';
             button.style.color = 'white';
             button.style.cursor = 'pointer';
-            button.style.fontSize = '16px';
             button.style.transition = 'background-color 0.3s';
-            button.style.userSelect = 'none'; // Prevent text selection during long press
 
             button.addEventListener('mouseenter', () => {
                 button.style.backgroundColor = '#45a049';
             });
-            
+
             button.addEventListener('mouseleave', () => {
                 button.style.backgroundColor = '#4CAF50';
             });
         });
-        
-        // Add button event listeners
+
+        // Handle rotate button events
         let isRotating = false;
         let rotateTimeout;
-        
+
         rotateButton.addEventListener('mousedown', () => {
             isRotating = true;
-            rotateTimeout = setTimeout(() => {
+            onRotateStart();
+            
+            // Continue rotation while held
+            const continueRotation = () => {
                 if (isRotating) {
-                    onRotateStart();
+                    rotateTimeout = setTimeout(continueRotation, 100);
                 }
-            }, 500); // 500ms long press
+            };
+            continueRotation();
         });
-        
+
         rotateButton.addEventListener('mouseup', () => {
             isRotating = false;
             clearTimeout(rotateTimeout);
             onRotateEnd();
         });
-        
+
         rotateButton.addEventListener('mouseleave', () => {
             if (isRotating) {
                 isRotating = false;
@@ -76,15 +84,10 @@ export class MenuBar {
             }
         });
 
-        // Add touch support for mobile
         rotateButton.addEventListener('touchstart', (e) => {
-            e.preventDefault(); // Prevent scrolling
+            e.preventDefault();
             isRotating = true;
-            rotateTimeout = setTimeout(() => {
-                if (isRotating) {
-                    onRotateStart();
-                }
-            }, 500);
+            onRotateStart();
         });
 
         rotateButton.addEventListener('touchend', () => {
@@ -101,11 +104,13 @@ export class MenuBar {
         
         settlementButton.addEventListener('click', onSettlementClick);
         roadButton.addEventListener('click', onRoadClick);
+        rollDiceButton.addEventListener('click', onRollDiceClick);
         
         // Add buttons to menu bar
         menuBar.appendChild(rotateButton);
         menuBar.appendChild(settlementButton);
         menuBar.appendChild(roadButton);
+        menuBar.appendChild(rollDiceButton);
         
         // Add menu bar to document
         document.body.appendChild(menuBar);

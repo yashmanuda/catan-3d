@@ -14,17 +14,15 @@ export class RotationControls {
 
         // Store exact initial camera state
         this.initialPosition = camera.position.clone();
-        this.initialY = this.initialPosition.y; // Store Y separately to ensure it never changes
+        this.initialY = this.initialPosition.y;
         
-        // Calculate horizontal distance using only x and z
         const horizontalPos = new THREE.Vector2(camera.position.x, camera.position.z);
         this.initialDistance = horizontalPos.length();
         this.initialAngle = Math.atan2(camera.position.z, camera.position.x);
 
-        // Force initial position to be exact
         this.updateCameraPosition();
 
-        // Create rotation sound (mechanical gears effect)
+        // Create rotation sound with fade effects
         this.rotationSound = new Audio('/src/assets/gears_sound_cut.wav');
         this.rotationSound.loop = true;
         this.rotationSound.volume = 0;  // Start with volume 0
@@ -93,20 +91,13 @@ export class RotationControls {
     }
 
     updateCameraPosition() {
-        // Calculate new position while maintaining exact initial height
         const angle = this.initialAngle + this.currentRotation;
-        
-        // Create new position vector
         const newPosition = new THREE.Vector3(
             Math.cos(angle) * this.initialDistance,
-            this.initialY, // Use stored Y value directly
+            this.initialY,
             Math.sin(angle) * this.initialDistance
         );
-        
-        // Set camera position directly
         this.camera.position.copy(newPosition);
-        
-        // Make camera look at center point
         this.camera.lookAt(this.target);
     }
 } 

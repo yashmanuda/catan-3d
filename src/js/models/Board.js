@@ -39,6 +39,9 @@ export class Board {
         this.cornerIndicators = new Map();
         this.edgeIndicators = new Map();
         
+        // Add tile number mapping for resource collection
+        this.tilesByNumber = new Map(); // Map<number, Array<{position: Vector3, resource: string}>>
+        
         this.setupGrid();
         this.group.position.y = 0;
     }
@@ -138,15 +141,18 @@ export class Board {
     createFlag(number, isRobberTile = false) {
         const group = new THREE.Group();
         
-        // Create the flag pole - made longer
-        const poleGeometry = new THREE.CylinderGeometry(0.02, 0.02, 1.2, 12);  // Increased height from 0.8 to 1.2
+        // Store the number in the flag's userData
+        group.userData = { number };
+        
+        // Create the flag pole
+        const poleGeometry = new THREE.CylinderGeometry(0.02, 0.02, 1.2, 12);
         const poleMaterial = new THREE.MeshStandardMaterial({ 
             color: 0xCCCCCC,
             metalness: 0.4,
             roughness: 0.5
         });
         const pole = new THREE.Mesh(poleGeometry, poleMaterial);
-        pole.position.y = 0.6;  // Adjusted position for longer pole
+        pole.position.y = 0.6;
         group.add(pole);
         
         // Create a sub-group for the flag and its contents that will rotate together
@@ -333,66 +339,83 @@ export class Board {
         return corner;
     }
 
-    highlightAvailableCorners(highlightedCorners) {
+    highlightAvailableCorners() {
         // Clear previous highlights
         this.hideCorners();
 
         // Get all corners from the board
-        const corners = Array.from(this.corners.values()).map(corner => corner.mesh);
-
-        // Only highlight valid settlement locations
-        corners.forEach(corner => {
-            if (this.isValidSettlementLocation(corner)) {
-                // Create pulsating indicator
-                const geometry = new THREE.SphereGeometry(0.15, 32, 32);
+        for (const [cornerKey, cornerData] of this.corners) {
+            const corner = cornerData.mesh;
+            
+            // Check if this is a valid settlement location
+            if (!cornerData.hasSettlement) {
+                let isValid = true;
                 
-                // Create outer glow material
-                const glowMaterial = new THREE.MeshStandardMaterial({
-                    color: 0x00ff88,
-                    transparent: true,
-                    opacity: 0.3,
-                    emissive: 0x00ff88,
-                    emissiveIntensity: 0.3
-                });
-
-                // Create inner sphere material
-                const coreMaterial = new THREE.MeshStandardMaterial({
-                    color: 0x00ff88,
-                    transparent: true,
-                    opacity: 0.7,
-                    emissive: 0x00ff88,
-                    emissiveIntensity: 0.5
-                });
-
-                // Create outer glow sphere
-                const glowSphere = new THREE.Mesh(geometry, glowMaterial);
+                // Check adjacent corners
+                for (const edgeKey of cornerData.connectedEdges) {
+                    const edge = this.edges.get(edgeKey);
+                    if (!edge) continue;
+                    
+                    const otherCornerKey = edge.start === cornerKey ? edge.end : edge.start;
+                    const otherCorner = this.corners.get(otherCornerKey);
+                    
+                    if (otherCorner && otherCorner.hasSettlement) {
+                        isValid = false;
+                        break;
+                    }
+                }
                 
-                // Create smaller inner sphere
-                const coreGeometry = new THREE.SphereGeometry(0.08, 32, 32);
-                const coreSphere = new THREE.Mesh(coreGeometry, coreMaterial);
+                if (isValid) {
+                    // Create pulsating indicator
+                    const geometry = new THREE.SphereGeometry(0.15, 32, 32);
+                    
+                    // Create outer glow material
+                    const glowMaterial = new THREE.MeshStandardMaterial({
+                        color: 0x00ff88,
+                        transparent: true,
+                        opacity: 0.3,
+                        emissive: 0x00ff88,
+                        emissiveIntensity: 0.3
+                    });
 
-                // Create a group to hold both spheres
-                const indicator = new THREE.Group();
-                indicator.add(glowSphere);
-                indicator.add(coreSphere);
-                
-                // Position the indicator at the corner
-                indicator.position.copy(corner.position);
-                indicator.position.y += 0.1;
-                
-                // Add to the board and store for animation
-                this.group.add(indicator);
-                this.cornerIndicators.set(corner, {
-                    mesh: indicator,
-                    glow: glowSphere,
-                    core: coreSphere,
-                    time: Date.now() * 0.001,
-                    glowMaterial,
-                    coreMaterial
-                });
-                highlightedCorners.push(indicator);
+                    // Create inner sphere material
+                    const coreMaterial = new THREE.MeshStandardMaterial({
+                        color: 0x00ff88,
+                        transparent: true,
+                        opacity: 0.7,
+                        emissive: 0x00ff88,
+                        emissiveIntensity: 0.5
+                    });
+
+                    // Create outer glow sphere
+                    const glowSphere = new THREE.Mesh(geometry, glowMaterial);
+                    
+                    // Create smaller inner sphere
+                    const coreGeometry = new THREE.SphereGeometry(0.08, 32, 32);
+                    const coreSphere = new THREE.Mesh(coreGeometry, coreMaterial);
+
+                    // Create a group to hold both spheres
+                    const indicator = new THREE.Group();
+                    indicator.add(glowSphere);
+                    indicator.add(coreSphere);
+                    
+                    // Position the indicator at the corner
+                    indicator.position.copy(corner.position);
+                    indicator.position.y += 0.1;
+                    
+                    // Add to the board and store for animation
+                    this.group.add(indicator);
+                    this.cornerIndicators.set(corner, {
+                        mesh: indicator,
+                        glow: glowSphere,
+                        core: coreSphere,
+                        time: Date.now() * 0.001,
+                        glowMaterial,
+                        coreMaterial
+                    });
+                }
             }
-        });
+        }
     }
 
     hideCorners() {
@@ -458,7 +481,8 @@ export class Board {
         return true;
     }
 
-    highlightAvailableEdges(highlightedEdges) {
+    highlightAvailableEdges() {
+        if (this.mode !== 'road') return;
         // Clear previous highlights
         this.hideEdges();
         
@@ -476,7 +500,6 @@ export class Board {
                             glow: indicator.children[0].material
                         }
                     });
-                    highlightedEdges.push(indicator);
                 }
             }
         }
@@ -549,7 +572,8 @@ export class Board {
         const resources = [];
         for (const [type, count] of Object.entries(standardResourceCounts)) {
             for (let i = 0; i < count; i++) {
-                resources.push(resourceTypes[type]);
+                // Store the resource type name along with the resource object
+                resources.push({ type: type, data: resourceTypes[type] });
             }
         }
         
@@ -579,22 +603,51 @@ export class Board {
                 
                 // Create tile group
                 const tileGroup = new THREE.Group();
-                tileGroup.userData = { q, r }; // Store coordinates for later use
+                tileGroup.userData = { q, r, resource: resource.data }; // Store resource data
                 
                 // Create base hex tile with resource placeholder
-                const tileMesh = this.createTileMesh(resource);
+                const tileMesh = this.createTileMesh(resource.data);
                 tileGroup.add(tileMesh);
 
                 // Add number flag if not desert
-                if (resource !== resourceTypes.DESERT) {
+                if (resource.type !== 'DESERT') {
                     const number = numbers[numberIndex++];
-                    const isRobberTile = this.robberPosition && 
-                        this.robberPosition.q === q && 
-                        this.robberPosition.r === r;
-                    const flag = this.createFlag(number, isRobberTile);
+                    const flag = this.createFlag(number, false);
                     flag.position.y = hexHeight;
                     tileGroup.add(flag);
                     this.flagGroups.push(flag);
+
+                    // Store tile info for resource collection
+                    if (!this.tilesByNumber.has(number)) {
+                        this.tilesByNumber.set(number, []);
+                    }
+                    
+                    // Store corner positions for this hex
+                    const hexCorners = [];
+                    for (let i = 0; i < 6; i++) {
+                        const angle = (i * Math.PI) / 3;
+                        const cornerX = position.x + Math.cos(angle) * hexRadius;
+                        const cornerZ = position.z + Math.sin(angle) * hexRadius;
+                        const cornerPos = new THREE.Vector3(cornerX, 0.1, cornerZ);
+                        const cornerKey = this.getCornerKey(cornerPos);
+                        hexCorners.push(cornerKey);
+                    }
+
+                    // Store tile data with number, resource, and corners
+                    const resourceName = resource.type === 'WHEAT' ? 'grain' : 
+                                       resource.type === 'SHEEP' ? 'wool' : 
+                                       resource.type.toLowerCase();
+
+                    const tileData = {
+                        position,
+                        resource: resourceName,
+                        number,
+                        q,
+                        r,
+                        corners: hexCorners
+                    };
+                    console.log(`Storing tile data for number ${number}:`, tileData);
+                    this.tilesByNumber.get(number).push(tileData);
                 } else {
                     const placeholder = this.createDesertPlaceholder();
                     placeholder.position.y = hexHeight;
@@ -823,10 +876,14 @@ export class Board {
     }
 
     isValidSettlementLocation(corner) {
+        // Get the corner key from the corner position
         const cornerKey = this.getCornerKey(corner.position);
         const cornerData = this.corners.get(cornerKey);
         
-        if (!cornerData) return false;
+        if (!cornerData) {
+            console.log('Corner not found:', cornerKey);
+            return false;
+        }
         
         // Rule 1: Only one settlement per corner
         if (cornerData.hasSettlement) {
@@ -837,6 +894,8 @@ export class Board {
         // Rule 2: No settlements on adjacent corners (connected by edges)
         for (const edgeKey of cornerData.connectedEdges) {
             const edge = this.edges.get(edgeKey);
+            if (!edge) continue;
+            
             const otherCornerKey = edge.start === cornerKey ? edge.end : edge.start;
             const otherCorner = this.corners.get(otherCornerKey);
             
@@ -904,5 +963,54 @@ export class Board {
         if (edgeData) {
             edgeData.hasRoad = true;
         }
+    }
+
+    setMode(mode) {
+        this.mode = mode;
+        
+        // Hide all indicators when changing modes
+        this.hideCorners();
+        this.hideEdges();
+
+        // Only show available edges if in road placement mode
+        if (mode === 'road') {
+            this.highlightAvailableEdges();
+        }
+    }
+
+    // Add method to collect resources based on dice roll
+    collectResources(diceRoll) {
+        if (diceRoll === 7) return new Map();
+
+        const resourcesCollected = new Map();
+        const tiles = this.tilesByNumber.get(diceRoll) || [];
+        
+        console.log(`Processing roll ${diceRoll}. Found ${tiles.length} matching tiles:`, tiles);
+        
+        tiles.forEach(tile => {
+            console.log(`Processing tile with number ${tile.number}, resource ${tile.resource}`);
+            let settlementsOnThisTile = 0;
+            
+            // Check each corner stored with this tile
+            tile.corners.forEach(cornerKey => {
+                const cornerData = this.corners.get(cornerKey);
+                console.log(`Checking corner ${cornerKey}:`, cornerData);
+                
+                if (cornerData && cornerData.hasSettlement) {
+                    settlementsOnThisTile++;
+                    const resourceType = tile.resource;
+                    console.log(`Found settlement at corner ${cornerKey}, collecting ${resourceType}`);
+                    resourcesCollected.set(
+                        resourceType,
+                        (resourcesCollected.get(resourceType) || 0) + 1
+                    );
+                }
+            });
+            
+            console.log(`Found ${settlementsOnThisTile} settlements on ${tile.resource} tile with number ${tile.number}`);
+        });
+
+        console.log('Final resources collected:', resourcesCollected);
+        return resourcesCollected;
     }
 } 
